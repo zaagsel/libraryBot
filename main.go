@@ -1,21 +1,27 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	"gorm.io/gorm"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	
+
 )
 
+
 func main() {
+
 	err := godotenv.Load()
     if err != nil {
         log.Fatal("Error loading .env file:", err)
     }
+
+	InitDB()
+    MigrateDB()
 
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if token == "" {
@@ -51,10 +57,69 @@ func main() {
 		if update.Message.IsCommand() {
 			switch update.Message.Command() {
 			case "start":
-				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Привет"))
+				userID := update.Message.From.ID
+				nickname := update.Message.From.UserName
+				userName := update.Message.From.FirstName + " " + update.Message.From.LastName
+				
+				user, isVerified := findUser(userID)
+				
+				if user != nil {
+					if isVerified {
+						keyboard := getMainMenuKeyboard()
+						msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Привет, %s! \n Выбери пункт меню:", userName))
+						msg.ReplyMarkup = keyboard
+						bot.Send(msg)
+					} else {
+						bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Привет, %s! \n Ваш аккаунт не верифицирован. \n Нажмите /start для повторной проверки.", userName)))
+					}
+				} else {
+					addUser(userID, nickname, userName)
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Привет, %s! Добавил вас в базу, ожидайте верификации от администратора!", userName)))
+				}
 			}
-
 		}
 	}
+}
 
+func addUser(userID int64, nickname, userName string) {
+	user := User{
+		ID: userID,
+		Nickname: nickname,
+		UserName: userName,
+	}
+
+	result := db.Create(&user)
+	if result.Error != nil {
+		log.Println("Error adding user:", result.Error)
+		return
+	}
+
+	log.Printf("User %d added successfully!", userID)
+}
+
+func findUser(userID int64) (*User, bool) {
+	var user User
+	result := db.First(&user, "id = ?", userID)
+	if result.Error != nil {
+        if result.Error == gorm.ErrRecordNotFound {
+            return nil, false
+        }
+        log.Println("Error finding user:", result.Error)
+        return nil, false
+    }
+	return &user, user.Verify
+}
+
+func getMainMenuKeyboard() tgbotapi.InlineKeyboardMarkup {
+    keyboard := tgbotapi.NewInlineKeyboardMarkup(
+        tgbotapi.NewInlineKeyboardRow(
+            tgbotapi.NewInlineKeyboardButtonData("Поиск книги", "search"),
+            tgbotapi.NewInlineKeyboardButtonData("Просмотр библиотеки", "library"),
+        ),
+        tgbotapi.NewInlineKeyboardRow(
+            tgbotapi.NewInlineKeyboardButtonData("Добавить книгу", "add_book"),
+        ),
+    )
+
+    return keyboard
 }
