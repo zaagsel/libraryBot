@@ -5,28 +5,24 @@ import (
 	"log"
 	"os"
 
-	"github.com/joho/godotenv"
-	"gorm.io/gorm"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	
-
+	"github.com/joho/godotenv"
 )
-
 
 func main() {
 
 	err := godotenv.Load()
-    if err != nil {
-        log.Fatal("Error loading .env file:", err)
-    }
+	if err != nil {
+		log.Fatal("Error loading .env file:", err)
+	}
 
 	InitDB()
-    MigrateDB()
+	MigrateDB()
 
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if token == "" {
-        log.Fatal("Telegram bot token is not set in .env file")
-    }
+		log.Fatal("Telegram bot token is not set in .env file")
+	}
 
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
@@ -34,18 +30,18 @@ func main() {
 	}
 
 	dbHost := os.Getenv("DB_HOST")
-    dbPort := os.Getenv("DB_PORT")
-    dbUser := os.Getenv("DB_USER")
-    dbPassword := os.Getenv("DB_PASSWORD")
-    dbName := os.Getenv("DB_NAME")
+	dbPort := os.Getenv("DB_PORT")
+	dbUser := os.Getenv("DB_USER")
+	dbPassword := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
 
 	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-        dbHost, dbPort, dbUser, dbPassword, dbName)
+		dbHost, dbPort, dbUser, dbPassword, dbName)
 
 	log.Println("Connecting to database:", psqlInfo)
 
 	u := tgbotapi.NewUpdate(0)
-    u.Timeout = 60
+	u.Timeout = 60
 
 	updates := bot.GetUpdatesChan(u)
 
@@ -60,9 +56,9 @@ func main() {
 				userID := update.Message.From.ID
 				nickname := update.Message.From.UserName
 				userName := update.Message.From.FirstName + " " + update.Message.From.LastName
-				
+
 				user, isVerified := findUser(userID)
-				
+
 				if user != nil {
 					if isVerified {
 						keyboard := getMainMenuKeyboard()
@@ -78,12 +74,22 @@ func main() {
 				}
 			}
 		}
+		if update.CallbackQuery != nil {
+			callback := update.CallbackQuery
+			switch callback.Data {
+			case "search":
+
+			case "library":
+
+			case "add_book":
+			}
+		}
 	}
 }
 
 func addUser(userID int64, nickname, userName string) {
 	user := User{
-		ID: userID,
+		ID:       userID,
 		Nickname: nickname,
 		UserName: userName,
 	}
@@ -101,25 +107,21 @@ func findUser(userID int64) (*User, bool) {
 	var user User
 	result := db.First(&user, "id = ?", userID)
 	if result.Error != nil {
-        if result.Error == gorm.ErrRecordNotFound {
-            return nil, false
-        }
-        log.Println("Error finding user:", result.Error)
-        return nil, false
-    }
+		return nil, false
+	}
 	return &user, user.Verify
 }
 
 func getMainMenuKeyboard() tgbotapi.InlineKeyboardMarkup {
-    keyboard := tgbotapi.NewInlineKeyboardMarkup(
-        tgbotapi.NewInlineKeyboardRow(
-            tgbotapi.NewInlineKeyboardButtonData("Поиск книги", "search"),
-            tgbotapi.NewInlineKeyboardButtonData("Просмотр библиотеки", "library"),
-        ),
-        tgbotapi.NewInlineKeyboardRow(
-            tgbotapi.NewInlineKeyboardButtonData("Добавить книгу", "add_book"),
-        ),
-    )
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Поиск книги", "search"),
+			tgbotapi.NewInlineKeyboardButtonData("Просмотр библиотеки", "library"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Добавить книгу", "add_book"),
+		),
+	)
 
-    return keyboard
+	return keyboard
 }
